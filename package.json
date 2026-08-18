@@ -1,0 +1,15 @@
+{
+  "name": "books-scraper",
+  "version": "1.0.0",
+  "description": "FlyRank Internship - Backend Track - W5 - A9 - The polite scraper",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "zod": "^3.25.76"
+  }
+}
