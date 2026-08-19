@@ -1,12 +1,13 @@
 // FlyRank Internship - Backend Track - W5 - A9 - The polite scraper
-// Stage 3: extract the raw records from every book page.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
 import * as cheerio from 'cheerio';
+import { normalizeRecord } from './normalize.js';
+import { validateRecords } from './validate.js';
 
 const CACHE_DIR = 'cache';
-const USER_AGENT = 'FlyRankInternshipA9/1.0 (+https://github.com/YOUR_USERNAME/books-scraper)';
+const USER_AGENT = 'FlyRankInternshipA9/1.0 (+https://github.com/AliHaroon111/books-scraper)';
 const TIMEOUT_MS = 8000;
 const POLITE_DELAY_MS = 500;
 const MAX_PAGES = 3;
@@ -145,10 +146,17 @@ async function extractAllBooks(bookUrls) {
 
 async function main() {
   const bookUrls = await discoverCataloguePages();
-  const records = await extractAllBooks(bookUrls);
+  const rawRecords = await extractAllBooks(bookUrls);
 
-  console.log('Sample record:');
-  console.log(JSON.stringify(records[0], null, 2));
+  const normalizedRecords = rawRecords.map(normalizeRecord);
+  const { valid, invalid } = validateRecords(normalizedRecords);
+
+  mkdirSync('output', { recursive: true });
+  writeFileSync('output/books.json', JSON.stringify(valid, null, 2), 'utf-8');
+  writeFileSync('output/errors.json', JSON.stringify(invalid, null, 2), 'utf-8');
+
+  console.log(`valid_records=${valid.length}`);
+  console.log(`invalid_records=${invalid.length}`);
 }
 
 main().catch((err) => {
