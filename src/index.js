@@ -1,5 +1,5 @@
 // FlyRank Internship - Backend Track - W5 - A9 - The polite scraper
-// Stage 2: discover all three catalogue pages and every book link on them.
+// Stage 3: extract the raw records from every book page.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
@@ -9,14 +9,21 @@ const CACHE_DIR = 'cache';
 const USER_AGENT = 'FlyRankInternshipA9/1.0 (+https://github.com/YOUR_USERNAME/books-scraper)';
 const TIMEOUT_MS = 8000;
 const POLITE_DELAY_MS = 500;
+const MAX_PAGES = 3;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Turns a book's absolute product URL into a safe, unique cache file name.
+function cacheNameForBookUrl(url) {
+  const parts = url.split('/').filter(Boolean);
+  const slug = parts[parts.length - 2]; // the folder name, e.g. "a-light-in-the-attic_1000"
+  return `book-${slug}.html`;
+}
+
 // Fetches a URL politely: honest user-agent, timeout, status check.
 // Reads from cache if we already saved this page before.
-// Returns { html, fromCache } so the caller knows whether to apply the polite delay.
 async function fetchWithCache(url, cacheFileName) {
   mkdirSync(CACHE_DIR, { recursive: true });
   const cachePath = path.join(CACHE_DIR, cacheFileName);
@@ -50,14 +57,12 @@ async function fetchWithCache(url, cacheFileName) {
   return { html, fromCache: false };
 }
 
-// Walks the catalogue starting at page 1, following the site's own "next" link,
-// collecting every absolute book URL along the way.
+// Walks the catalogue starting at page 1, following the site's own "next" link
+// up to MAX_PAGES, collecting every absolute book URL along the way.
 async function discoverCataloguePages() {
   const bookUrls = [];
   let pageUrl = 'https://books.toscrape.com/catalogue/page-1.html';
   let pageNumber = 1;
-
-  const MAX_PAGES = 3;
 
   while (pageUrl && pageNumber <= MAX_PAGES) {
     const cacheFileName = `catalogue-page-${pageNumber}.html`;
@@ -75,7 +80,6 @@ async function discoverCataloguePages() {
     const hasNext = Boolean(nextHref);
     pageUrl = hasNext && pageNumber < MAX_PAGES ? new URL(nextHref, pageUrl).href : null;
 
-    // Only wait between real network requests - cached pages never left our computer.
     if (!fromCache && pageUrl) {
       await sleep(POLITE_DELAY_MS);
     }
@@ -85,15 +89,66 @@ async function discoverCataloguePages() {
 
   const uniqueUrls = [...new Set(bookUrls)];
 
-  console.log(`catalogue_pages=${pageNumber - 1}`);
+  console.log(`catalogue_pages=${MAX_PAGES}`);
   console.log(`discovered=${bookUrls.length}`);
   console.log(`unique_urls=${uniqueUrls.length}`);
 
   return uniqueUrls;
 }
 
+// Extracts one raw record from a single book detail page's HTML.
+function extractRawRecord(html, bookUrl, sourcePage) {
+  const $ = cheerio.load(html);
+  const productArea = $('div.product_main');
+
+  const title = productArea.find('h1').text().trim();
+  const priceText = productArea.find('p.price_color').first().text().trim();
+  const availabilityText = productArea.find('p.availability').text().trim().replace(/\s+/g, ' ');
+
+  const ratingClasses = productArea.find('p.star-rating').attr('class') || '';
+  const ratingText = ratingClasses.replace('star-rating', '').trim() || null;
+
+  const descriptionEl = $('#product_description').next('p');
+  const description = descriptionEl.length ? descriptionEl.text().trim() : null;
+
+  return {
+    title,
+    product_url: bookUrl,
+    price_text: priceText,
+    availability_text: availabilityText,
+    rating_text: ratingText,
+    description,
+    source_page: sourcePage,
+    fetched_at: new Date().toISOString(),
+  };
+}
+
+// Fetches and extracts every book on the given list of URLs.
+async function extractAllBooks(bookUrls) {
+  const records = [];
+
+  for (const bookUrl of bookUrls) {
+    const cacheFileName = cacheNameForBookUrl(bookUrl);
+    const { html, fromCache } = await fetchWithCache(bookUrl, cacheFileName);
+
+    const record = extractRawRecord(html, bookUrl, bookUrl);
+    records.push(record);
+
+    if (!fromCache) {
+      await sleep(POLITE_DELAY_MS);
+    }
+  }
+
+  console.log(`detail_pages=${records.length}`);
+  return records;
+}
+
 async function main() {
-  await discoverCataloguePages();
+  const bookUrls = await discoverCataloguePages();
+  const records = await extractAllBooks(bookUrls);
+
+  console.log('Sample record:');
+  console.log(JSON.stringify(records[0], null, 2));
 }
 
 main().catch((err) => {
