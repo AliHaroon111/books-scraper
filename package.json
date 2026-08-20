@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test:failure": "cross-env INJECT_FAKE_URL=1 node src/index.js"
   },
   "license": "MIT",
   "dependencies": {
